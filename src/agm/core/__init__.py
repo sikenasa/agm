@@ -8,8 +8,7 @@ from .status import (
     PotencyStatus,
     ev,
 )
-from .target import (
-    Target,
-)
+from . import target
+from .target import Target
 from .team import Team
 from .unit import Unit

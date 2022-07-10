@@ -1,2 +1,4 @@
-from .commands import (Attack)
+from .commands import (
+    Attack, Defend, Concentrate,
+)
 from .statuses import *

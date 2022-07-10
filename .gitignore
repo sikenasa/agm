@@ -1,3 +1,4 @@
 .tasks.ini
 
+/.cache
 __pycache__

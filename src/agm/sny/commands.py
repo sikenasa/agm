@@ -1,25 +1,22 @@
 from agm.core import ActionType, Engine
 
-@ActionType(
-    "Attack",
-    "Deal [AP] damage to a target.",
-).with_
-def Attack(c: Engine):
-    c["target"] = c.scene.units[-1]
+Attack = ActionType("Attack", "Deal [AP] damage to a target.")
+
+@Attack.with_body
+def _(c: Engine):
+    c.target = c.scene.units[-1]
     c.attack(c.roll(c.actor.ap))
 
-@ActionType(
-    "Defend",
-    "Grant Guard [GP] to the user.",
-).with_
-def Defend(c: Engine):
-    c["target"] = c.actor
-    c["target"].guard += c.roll(c.actor.gp)
+Defend = ActionType("Defend", "Grant Guard [GP] to the user.")
 
-@ActionType(
-    "Concentrate",
-    "Gain +[CP] Charge to the user.",
-).with_
-def Defend(c: Engine):
-    c["target"] = c.actor
-    c["target"].charge += c.roll(c.actor.cp)
+@Defend.with_body
+def _(c: Engine):
+    c.target = c.actor
+    c.target.guard += c.roll(c.actor.gp)
+
+Concentrate = ActionType("Concentrate", "Gain +[CP] Charge to the user.")
+
+@Concentrate.with_body
+def _(c: Engine):
+    c.target = c.actor
+    c.target.charge += c.roll(c.actor.cp)

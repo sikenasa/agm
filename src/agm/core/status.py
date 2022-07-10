@@ -1,10 +1,10 @@
-from typing import Callable, Type, Optional as Maybe
+from typing import Callable, Type, Optional as Maybe, Union as U, Union as U
 from dataclasses import dataclass, field
 
 class Status:
     ...
 
-from . import engine, observer
+from . import engine, observer, unit, scene as scn, target as tgt
 
 
 EventHandler = tuple[str, int, Callable[[engine.Engine], None]]
@@ -35,17 +35,17 @@ class Status: ...
 
 class Status(metaclass=StatusMeta):
     def __init__(self):
-        self._disable = 0
+        self._disable: int = 0
 
-        self.parent = None
-        self.owner = None
-        self.turns = None
-        self.uses = None
-        self.unbreakable = False
-        self.permanent = False
-        self.key = False
-        self.invisible = False
-        self.implicit = False
+        self.parent: Status = None
+        self.owner: unit.Unit = None
+        self.turns: U[int, None] = None
+        self.uses: U[int, None] = None
+        self.unbreakable: bool = False
+        self.permanent: bool = False
+        self.key: bool = False
+        self.invisible: bool = False
+        self.implicit: bool = False
 
     def enabled(self):
         return self._disable == 0
@@ -65,11 +65,11 @@ class Status(metaclass=StatusMeta):
     def use(self) -> bool:
         pass
 
-    def on_init(self, owner, scene, cond = None):
+    def on_init(self, owner: unit.Unit, scene: scn.Scene, cond: Callable[[engine.Engine], bool] = None):
         for type_, priority, body in self.__class__.events:
             scene.events[type_].append(observer.Observer(self, owner, body, priority, cond))
 
-    def on_remove(self):
+    def on_remove(self, scene):
         for ev in self.__class__.events:
             print("erase...")
 
@@ -96,6 +96,8 @@ class Status(metaclass=StatusMeta):
 
         return ""
 
+    def aura(self, target: tgt.Target) -> Status: pass
+    def vs(self, cond: Callable[[engine.Engine], bool]) -> Status: pass
 
 class PotencyStatus(Status):
     def __init__(self, potency: object):

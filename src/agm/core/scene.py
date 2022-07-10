@@ -4,7 +4,8 @@ from collections import defaultdict
 class Scene:
     ...
 
-from . import unit, team, observer
+from . import unit, team, observer, target
+from .target import Target
 
 @dataclass
 class Scene:
@@ -24,6 +25,16 @@ class Scene:
     def unlink(self, unit: unit.Unit):
         unit.unlink(self)
         self.units.remove(unit)
+
+    def query(self, target: Target, filter_ = lambda u: not u.dead):
+        iter = [u for u in self.units if target.belongs(u)]
+        yield from filter(filter_, iter)
+
+    def T(self, team_name: str) -> Target:
+        return target.Team(self.teams[team_name])
+
+    def U(self, idx: int) -> Target:
+        return target.Unit(self.units[idx])
 
     def show(self, status = True, spells = False) -> str:
         ret = f"TURN {self.turn}"

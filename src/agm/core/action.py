@@ -17,9 +17,11 @@ class ActionType:
     body: Callable[[engine.Engine], None] = None
     passive: Callable[[], status.Status] = None
 
-    def with_(self, f) -> ActionType:
+    def with_body(self, f):
         self.body = f
-        return self
+
+    def with_passive(self, f):
+        self.passive = f
 
     def __call__(self):
         return Action(self)
