@@ -27,20 +27,12 @@ def _and_(self: Status, o: Status):
 # *tiktok voice* I love open classes!
 setattr(Status, "__and__", _and_)
 
-class Aura(Status):
-    def __init__(self, status: Status, target: Target):
-        super().__init__()
-        self.status = status
-        self.target = target
-
-    def show(self) -> str:
-        return f"<{self.status.show()}> Aura [{self.target.show()}]{self._show_duration()}"
-
+class Aura(MountedStatus):
     def on_init(self, owner: Unit, scene: Engine, cond = None):
-        self.status.on_init(self.target, scene, cond)
+        self.mount.on_init(self.potency, scene, cond)
 
     def on_remove(self):
-        self.status.on_remove()
+        self.mount.on_remove()
 
 def _(self, target: Target) -> Status:
     return Aura(self, target)

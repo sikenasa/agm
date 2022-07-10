@@ -111,8 +111,6 @@ class Engine:
                         continue
                     obs.body(self)
 
-
-
     @scoped("actor")
     def perform(self, action: Action):
         self["action"] = action
@@ -142,8 +140,8 @@ class Engine:
         self["dice"] = dice
 
         self.notify("pre_roll")
-        ret = self["dice"].roll()
 
+        ret = self["dice"].roll()
         if use_charge:
             ret += self.actor.charge
 
@@ -151,41 +149,62 @@ class Engine:
 
         return ret
 
-    @scoped("actor", "action", "target")
-    def attack(self: Engine, damage: U[int, Roll]):
+    @scoped("actor", "action")
+    def select_target(self, type: str, filter_: Target = None, num_targets: int = 1, aoe: bool = False) -> list[Unit]:
+        uts = self.scene.units[-1:]
+
+        self._top |= { "target": uts, "type": type }
+        self.notify("target")
+
+        return uts
+
+    @scoped("actor", "action")
+    def select_team(self, team: str, num_targets: int = 1) -> list[Unit]:
+        uts = [*filter(u for u in self.scene.units if u.team == team)]
+
+        return uts
+
+    @scoped("actor", "action")
+    def attack(self: Engine, damage: int, targets: list[Unit] = None, aoe: bool = False):
+
         self._top |= {
-            "damage": damage,
-            "flat_in": -self.target.guard,
+            "out_damage": damage,
             "flat_out": 0,
-            "prop_in": 1.,
             "prop_out": 1.,
+            "aoe": aoe,
         }
 
         self.notify("out_attack")
-        self.notify("in_attack")
+        self["out_damage"] = max(0, self["out_damage"] + self["flat_out"]) * self["prop_out"]
 
-        if self.target.dead:
-            return
+        if targets is None:
+            targets = [self.actor]
 
-        damage = self["damage"] = int(
-            max(0,
-                max(0,
-                    self["damage"] + self["flat_out"]
-                ) * self["prop_out"] + self["flat_in"]
-            ) * self["prop_in"]
-        )
+        for t in targets:
+            self._top |= {
+                "damage": self["out_damage"],
+                "target": t,
+                "flat_in": -t.guard,
+                "prop_in": 1.,
+            }
+            self.notify("in_attack")
 
-        self.target.hp = max(0, self.target.hp - damage)
+            if t.dead:
+                continue
 
-        self.notify("post_attack")
+            damage = self["damage"] = int(max(0, self["damage"] + self["flat_in"]) * self["prop_in"])
 
-        if self.target.hp > 0:
-            return
+            t.hp = max(0, t.hp - damage)
 
-        self.target.dead = True
-        self.notify("death")
+            self.notify("post_attack")
 
-        if self.target.stay:
-            return
+            if t.hp > 0:
+                continue
 
-        self.scene.unlink(self.target)
+            t.dead = True
+            self.notify("death")
+
+            if t.stay:
+                continue
+
+            self.scene.unlink(t)

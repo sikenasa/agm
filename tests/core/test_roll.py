@@ -19,4 +19,3 @@ def test_roll_types(test_input: Roll, expected: tuple[int, int, int]):
     assert test_input.min == expected[0]
     assert test_input.max == expected[1]
     assert test_input.num == expected[2]
-

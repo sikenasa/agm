@@ -6,6 +6,7 @@ from .scene import Scene
 from .status import (
     Status,
     PotencyStatus,
+    MountedStatus,
     ev,
 )
 from . import target

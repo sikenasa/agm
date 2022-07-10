@@ -21,8 +21,12 @@ class Target:
     def __or__(self, o: Target) -> Target:
         return Or(self, o)
 
-    def show(self, ctx: scene.Scene) -> str:
+    def show(self) -> str:
         return "Any"
+
+    def __str__(self) -> str:
+        return self.show()
+
 
 @dataclass
 class Team(Target):

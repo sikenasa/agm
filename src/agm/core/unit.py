@@ -15,7 +15,7 @@ class Unit:
     inflictors: dict[Unit, status.Status] = field(default_factory=dict)
 
     roles: list[str] = field(default_factory=list)
-    hp: int = 0
+    hp: int = 1
     max_hp: int = 1
     num_acts: Opt[int] = None
     ap: U[None, roll.Roll, int] = None
@@ -39,14 +39,12 @@ class Unit:
         for status in self.statuses:
             status.on_remove(scene)
 
-    def link_status(self, status: status.Status, scene: scene.Scene):
-        self.inflictors[status] = self
+    def link_status(self, status: status.Status):
         self.statuses.append(status)
         status.on_init(self, scene)
 
-    def unlink_status(self, status: status.Status, scene: scene.Scene):
+    def unlink_status(self, status: status.Status):
         status.on_remove(scene)
-        del self.inflictors[status]
         self.statuses.remove(status)
 
     def show(self, status = True, spells = lambda spl: spl.cd > 0) -> str:
@@ -84,7 +82,7 @@ class Unit:
         if not sts:
             return ""
 
-        return "\n:: " + ", ".join(map(lambda sts: sts.show(), sts))
+        return "\n:: " + ", ".join(map(str, sts))
 
     def _show_actions(self, filter_) -> str:
         if filter_ is False:
