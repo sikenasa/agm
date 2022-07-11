@@ -11,7 +11,7 @@ class Link(Status):
         return self
 
     def show(self) -> str:
-        return " && ".join(map(lambda sts: sts.show(), self.statuses))
+        return " && ".join( map(str, self.statuses))
 
     def on_init(self, owner: Unit, scene: Engine, cond = None):
         for sts in self.statuses:
@@ -28,11 +28,11 @@ def _and_(self: Status, o: Status):
 setattr(Status, "__and__", _and_)
 
 class Aura(MountedStatus):
-    def on_init(self, owner: Unit, scene: Engine, cond = None):
+    def on_init(self, owner: Unit, scene: Scene, cond = None):
         self.mount.on_init(self.potency, scene, cond)
 
-    def on_remove(self):
-        self.mount.on_remove()
+    def on_remove(self, scene: Scene):
+        self.mount.on_remove(scene)
 
 def _(self, target: Target) -> Status:
     return Aura(self, target)

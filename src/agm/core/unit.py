@@ -1,51 +1,59 @@
 from dataclasses import dataclass, field
 from typing import Union as U, Optional as Opt
+from enum import Flag, auto
 
 class Unit:
     ...
 
-from . import team, roll, status, action, scene
+from . import team, roll, status as status_, action, scene
+
+class UnitEnum(Flag):
+    STAY = auto()
+    DEAD = auto()
+    REMOVED = auto()
+    DEF = 0
+
 
 @dataclass
 class Unit:
     name: str
     team: str
-    actions: list[action.Action] = field(default_factory=list)
-    statuses: list[status.Status] = field(default_factory=list)
-    inflictors: dict[Unit, status.Status] = field(default_factory=dict)
-
-    roles: list[str] = field(default_factory=list)
+    statuses: list[status_.Status] = field(default_factory=list)
+    inflictors: dict[status_.Status, Unit] = field(default_factory=dict)
+    num_acts: U[int, None] = None
     hp: int = 1
-    max_hp: int = 1
-    num_acts: Opt[int] = None
-    ap: U[None, roll.Roll, int] = None
-    gp: U[None, roll.Roll, int] = None
-    cp: U[None, roll.Roll, int] = None
     guard: int = 0
     charge: int = 0
     priority: int = 0
 
-    stay: bool = False
-    dead: bool = False
+    roles: list[str] = field(default_factory=list)
+    max_hp: int = 1
+    ap: U[None, roll.Roll, int] = None
+    gp: U[None, roll.Roll, int] = None
+    cp: U[None, roll.Roll, int] = None
+    actions: list[action.Action] = field(default_factory=list)
+
+    flags: UnitEnum = UnitEnum.DEF
+
+    def __eq__(self, o: Unit) -> bool:
+        return self is o
 
     def can_act(self) -> bool:
-        return not self.dead and isinstance(self.num_acts, int) and self.num_acts > 0
+        return UnitEnum.DEAD | UnitEnum.REMOVED not in self.flags \
+            and isinstance(self.num_acts, int) and self.num_acts > 0
 
-    def link(self, scene: scene.Scene):
-        for status in self.statuses:
-            status.on_init(self, scene)
+    def _link_status(self,
+        status: status_.Status,
+        scene: scene.Scene,
+        target: Unit,
+    ) -> None:
+        status.on_init(target, scene)
+        self.inflictors[status] = target
+        status.owner = self
+        status.flags &= ~status_.StatusEnum.REMOVED
 
-    def unlink(self, scene: scene.Scene):
-        for status in self.statuses:
-            status.on_remove(scene)
-
-    def link_status(self, status: status.Status):
-        self.statuses.append(status)
-        status.on_init(self, scene)
-
-    def unlink_status(self, status: status.Status):
-        status.on_remove(scene)
-        self.statuses.remove(status)
+    def __str__(self):
+        return self.show()
 
     def show(self, status = True, spells = lambda spl: spl.cd > 0) -> str:
         out = self._show_name()
@@ -77,7 +85,7 @@ class Unit:
         return ret
 
     def _show_statuses(self) -> str:
-        sts = [*filter(lambda sts: not sts.invisible, self.statuses)]
+        sts = [*filter(lambda sts: status_.StatusEnum.INVISIBLE not in sts.flags, self.statuses)]
 
         if not sts:
             return ""

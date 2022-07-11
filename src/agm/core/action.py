@@ -30,21 +30,19 @@ class ActionType:
 class Action:
     type: ActionType
     cd: int = 0
-    max_cd: int = 0
     _disable: int = 0
     _passive: status.Status = None
 
     def __post_init__(self):
-        self.max_cd = self.type.cd
         self._disable = 0
+
+    def usable(self) -> bool:
+        return self.enabled() and self.cd == 0
 
     def tick(self) -> bool:
         if self.cd > 0:
             self.cd -= 1
         return self.cd == 0
-
-    def usable(self) -> bool:
-        return self.enabled() and self.cd == 0
 
     def enabled(self) -> bool:
         return self._disable == 0
@@ -55,7 +53,7 @@ class Action:
     def enable(self):
         self._disable -= 1
 
-    def show(self):
+    def __str__(self):
         out = self.type.name
 
         if not (self.cd == 0 and self.max_cd == 0):

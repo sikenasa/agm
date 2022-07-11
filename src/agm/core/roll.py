@@ -12,7 +12,7 @@ class Roll:
 
     def roll_a(self) -> Iterator[int]:
         return (
-            randrange(self.min, self.max)
+            randrange(self.min, self.max+1)
             for _ in range(0, self.num)
         )
 

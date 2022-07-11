@@ -4,8 +4,7 @@ from collections import defaultdict
 class Scene:
     ...
 
-from . import unit, team, observer, target
-from .target import Target
+from . import unit, team, observer, target as tgt, engine, status as sts
 
 @dataclass
 class Scene:
@@ -18,23 +17,106 @@ class Scene:
         self.teams["ally"] = team.Team("ally", "allies")
         self.teams["enemy"] = team.Team("enemy", "enemies")
 
-    def link(self, unit: unit.Unit):
-        self.units.append(unit)
-        unit.link(self)
+    def link(self, target: unit.Unit):
+        for status in target.statuses:
+            target._link_status(status, self, target)
+        self.units.append(target)
+        target.flags &= ~unit.UnitEnum.REMOVED
 
-    def unlink(self, unit: unit.Unit):
-        unit.unlink(self)
-        self.units.remove(unit)
+    def unlink(self, target: unit.Unit):
+        for status in target.statuses:
+            owner = status.owner
+            self._unlink_status_aux(
+                status,
+                owner,
+                owner.inflictors[status]
+            )
 
-    def query(self, target: Target, filter_ = lambda u: not u.dead):
-        iter = [u for u in self.units if target.belongs(u)]
-        yield from filter(filter_, iter)
+        if len(self.units) > 1:
+            idx = self.units.index(target)
+            self.units[idx-1].inflictors |= target.inflictors
 
-    def T(self, team_name: str) -> Target:
-        return target.Team(self.teams[team_name])
+        target.inflictors.clear()
+        self.units.remove(target)
+        target.flags |= unit.UnitEnum.REMOVED
 
-    def U(self, idx: int) -> Target:
-        return target.Unit(self.units[idx])
+    def link_status(self,
+        status: sts.Status,
+        source: unit.Unit,
+        target: unit.Unit = None
+    ):
+        if target is None:
+            target = self
+
+        source._link_status(status, self, target)
+        target.statuses.append(status)
+
+    def unlink_status(self, status: sts.Status):
+        owner = status.owner
+        target = owner.inflictors[status]
+        target.statuses.remove(status)
+        self._unlink_status_aux(status, owner, target)
+
+    def _unlink_status_aux(self, status: sts.Status, owner, target):
+        status.on_remove(self)
+        del status.owner.inflictors[status]
+        status.owner = None
+        status.flags |= sts.StatusEnum.REMOVED
+
+    def query(self, target: tgt.Target):
+        yield from filter(
+            lambda u: unit.UnitEnum.REMOVED not in u.flags,
+            [u for u in self.units if target.belongs(u)]
+        )
+
+    def T(self, team_name: str) -> tgt.Team:
+        return tgt.Team(self.teams[team_name])
+
+    def U(self, unit_idx: int) -> tgt.Unit:
+        return tgt.Unit(self.units[unit_idx])
+
+    def notify(self, e: engine.Engine, type: str):
+        if type not in self.events:
+            return
+
+        for obs in [*self.events[type]]:
+            if sts.StatusEnum.REMOVED in obs.status.flags:
+                continue
+
+            e.ctx.status = obs.status
+
+            if isinstance(obs.owner, unit.Unit):
+                obs.callback(e, obs.owner)
+
+            elif isinstance(obs.owner, tgt.Target):
+                for unit_ in self.query(obs.owner):
+                    obs.callback(e, unit_)
+
+    def tick_global_turn(self):
+        self.turn += 1
+        for unit in self.units:
+            unit.num_acts = 1
+
+    def get_next_unit_turn(self) -> unit.Unit:
+        target: unit.Unit = None
+
+        for u in self.units:
+            if u.can_act() and (
+                target is None or target.priority < u.priority
+            ):
+                target = u
+
+        return target
+
+    def tick_unit_turn(self, target: unit.Unit):
+        for act in target.actions:
+            act.tick()
+        for sts in target.inflictors:
+            if sts.tick():
+                self.unlink_status(sts)
+
+    def __str__(self) -> str:
+        return self.show()
 
     def show(self, status = True, spells = False) -> str:
         ret = f"TURN {self.turn}"

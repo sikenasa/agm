@@ -2,123 +2,85 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Union as U
 
-class Engine:
-    ...
+class Engine: ...
+class Context: ...
 
-from .unit import Unit
+from .unit import Unit, UnitEnum
 from .target import Target
 from .status import Status
 from .roll import Roll, D
 from .action import Action
 from .scene import Scene
+from . import ai
 
 class ActionInterrupt(Exception): ...
 class EffectInterrupt(Exception): ...
 
+class Context:
+    def __or__(self, o: dict) -> Context:
+        self.__dict__ |= o
+        return self
+
 def scoped(*inherit):
     def decorator(f):
         @wraps(f)
-        def wrapper(self, *args, with_ctx = False, **kwargs) -> object:
-            scope = {}
-            for key in inherit:
-                scope[key] = self[key]
-            self._stack.append(self._top)
-            self._top = scope
+        def wrapper(self: Engine, *args, with_ctx = False, **kwargs):
+            prev_ctx = self.ctx
+
+            scope = Context() | prev_ctx.__dict__
+
+            self.ctx = scope
 
             try:
-                res = f(self, *args, **kwargs)
+                res = f(self, scope, *args, **kwargs)
             except ActionInterrupt:
                 pass
 
-            self._top = self._stack.pop()
+            self.ctx = prev_ctx
 
-            if with_ctx:
-                return res, scope
-            else:
-                return res
+            return (res, scope) if with_ctx else res
         return wrapper
     return decorator
 
 @dataclass
 class Engine:
     scene: Scene = field(default_factory=Scene)
-    _top: dict[str, object] = field(default_factory=dict)
-    _stack: list[dict[str,object]] = field(default_factory=list)
+    ctx: Context = field(default_factory=Context)
+    proxy: dict[Unit, ai.AI] = field(default_factory=dict)
 
-    def __getitem__(self, key) -> object:
-        return self._top[key]
-
-    def __setitem__(self, key, value):
-        self._top[key] = value
-
-    @property
-    def actor(self) -> Unit:
-        return self._top["actor"]
-
-    @actor.setter
-    def actor(self, unit: Unit):
-        self._top["actor"] = unit
-
-    @property
-    def action(self) -> Action:
-        return self._top["action"]
-
-    @action.setter
-    def action(self, action: Action):
-        self._top["action"] = action
-
-    @property
-    def target(self) -> Unit:
-        return self._top["target"]
-
-    @target.setter
-    def target(self, unit: Unit):
-        self._top["target"] = unit
-
-    @property
-    def status(self) -> Status:
-        return self._top["status"]
-
-    @status.setter
-    def status(self, status: Status):
-        self._top["status"] = status
-
-    @property
-    def source(self) -> Unit:
-        return self._top["source"]
-
-    @source.setter
-    def source(self, unit: Unit):
-        self._top["source"] = unit
+    def make() -> (Engine, Context, Scene):
+        eng = Engine()
+        return eng, eng.ctx, eng.scene
 
     def stop_effect(self):
         raise EffectInterrupt
 
-    def notify(self, type: str):
-        for obs in self.scene.events.get(type, []):
-            self.status = obs.status
+    def notify(self, type: str) -> None:
+        self.scene.notify(self, type)
 
-            if isinstance(obs.owner, Unit):
-                self.source = obs.owner
-                if obs.cond is not None and not obs.cond(self):
-                    continue
-                obs.body(self)
-
-            elif isinstance(obs.owner, Target):
-                for unit in self.scene.query(obs.owner):
-                    self.source = unit
-                    if obs.cond is not None and not obs.cond(self):
-                        continue
-                    obs.body(self)
+    def global_turn(self):
+        self.scene.tick_global_turn()
+        self.notify("global_tick")
 
     @scoped("actor")
-    def perform(self, action: Action):
-        self["action"] = action
-        self["cooldown"] = action.max_cd
+    def unit_turn(self, ctx):
+        actor: Unit = ctx.actor
+        self.scene.tick_unit_turn(actor)
+        self.notify("pre_unit_turn")
+
+        while actor.num_acts is not None and actor.num_acts > 0:
+            actor.num_acts -= 1
+
+        self.notify("post_unit_turn")
+        ctx.actor.num_acts = None
+
+    @scoped("actor", "target")
+    def perform(self, ctx, action: Action):
+        ctx |= { "action": action, "cooldown": action.type.cd }
 
         self.notify("pre_action")
 
-        action.cd = self["cooldown"]
+        action.cd = ctx.cooldown
 
         self.notify("post_cooldown")
 
@@ -136,38 +98,52 @@ class Engine:
         return self.roll_generic(dice, use_charge = use_charge)
 
     @scoped("actor")
-    def roll_generic(self, dice: Roll, use_charge = False, with_ctx = False) -> int:
-        self["dice"] = dice
+    def roll_generic(self, ctx, dice: Roll, use_charge = False) -> int:
+        ctx.dice = dice
 
         self.notify("pre_roll")
 
-        ret = self["dice"].roll()
+        ret = ctx.dice.roll()
         if use_charge:
-            ret += self.actor.charge
+            ret += ctx.actor.charge
 
         self.notify("post_roll")
 
         return ret
 
     @scoped("actor", "action")
-    def select_target(self, type: str, filter_: Target = None, num_targets: int = 1, aoe: bool = False) -> list[Unit]:
+    def select_target(self,
+        ctx: Context,
+        type: str,
+        target: Target = None,
+        num_targets: int = 1,
+        aoe: bool = False
+    ) -> list[Unit]:
         uts = self.scene.units[-1:]
 
-        self._top |= { "target": uts, "type": type }
+        ctx |= { "target": uts, "type": type }
         self.notify("target")
 
         return uts
 
     @scoped("actor", "action")
-    def select_team(self, team: str, num_targets: int = 1) -> list[Unit]:
+    def select_team(self,
+        ctx,
+        team: str,
+        num_targets: int = 1
+    ) -> list[Unit]:
         uts = [*filter(u for u in self.scene.units if u.team == team)]
 
         return uts
 
     @scoped("actor", "action")
-    def attack(self: Engine, damage: int, targets: list[Unit] = None, aoe: bool = False):
-
-        self._top |= {
+    def attack(self,
+        ctx,
+        damage: int,
+        targets: list[Unit] = None,
+        aoe: bool = False
+    ):
+        ctx |= {
             "out_damage": damage,
             "flat_out": 0,
             "prop_out": 1.,
@@ -175,36 +151,38 @@ class Engine:
         }
 
         self.notify("out_attack")
-        self["out_damage"] = max(0, self["out_damage"] + self["flat_out"]) * self["prop_out"]
+
+        ctx.out_damage = max(0, ctx.out_damage + ctx.flat_out) * ctx.prop_out
 
         if targets is None:
             targets = [self.actor]
 
         for t in targets:
-            self._top |= {
-                "damage": self["out_damage"],
+            if UnitEnum.REMOVED in t.flags:
+                continue
+
+            ctx |= {
+                "damage": ctx.out_damage,
                 "target": t,
                 "flat_in": -t.guard,
                 "prop_in": 1.,
             }
             self.notify("in_attack")
 
-            if t.dead:
+            if UnitEnum.DEAD in t.flags:
                 continue
 
-            damage = self["damage"] = int(max(0, self["damage"] + self["flat_in"]) * self["prop_in"])
-
+            damage = ctx.damage = int(max(0, ctx.damage + ctx.flat_in) * ctx.prop_in)
             t.hp = max(0, t.hp - damage)
-
             self.notify("post_attack")
 
             if t.hp > 0:
                 continue
 
-            t.dead = True
+            t.flags |= UnitEnum.DEAD
             self.notify("death")
 
-            if t.stay:
+            if UnitEnum.STAY in t.flags:
                 continue
 
             self.scene.unlink(t)

@@ -5,6 +5,7 @@ from .roll import D, Roll
 from .scene import Scene
 from .status import (
     Status,
+    StatusEnum,
     PotencyStatus,
     MountedStatus,
     ev,
@@ -12,4 +13,6 @@ from .status import (
 from . import target
 from .target import Target
 from .team import Team
-from .unit import Unit
+from .unit import (
+    Unit, UnitEnum
+)

@@ -1,30 +1,22 @@
 from agm import *
 
-class AtkUp(PotencyStatus):
-    @ev()
-    def out_attack(ctx: Engine):
-        if ctx.source is not ctx.actor:
-            return
+eng, ctx, scn = Engine.make()
 
-        ctx["flat_out"] += ctx.status.potency
+print(sum(len(b) for _,b in scn.events.items()))
 
-ctx = Engine()
-scn = ctx.scene
-
-for _ in range(2):
-    scn.link(Unit(
-        "Sandra", "ally",
+for i in range(1, 4):
+    scn.link(Unit(f"Sandra#{i}", "ally",
         hp = 90, max_hp = 90,
-        statuses = [AtkUp(5).aura(scn.T("ally")).t(3)]
+        statuses = [
+            AtkUp(5).aura(scn.T("ally")).u(4),
+        ],
     ))
 
-for _ in range(3):
-    scn.link(Unit(
-        "Sandra", "enemy",
-        hp = 90, max_hp = 90,
-    ))
+print(sum(len(b) for _,b in scn.events.items()))
 
-ctx.actor = scn.units[0]
-ctx.action = None
-ctx.attack(20, scn.query(scn.T("enemy")))
-print(scn.show())
+while scn.units:
+    scn.unlink(scn.units[0])
+
+print(sum(len(b) for _,b in scn.events.items()))
+
+print(scn)

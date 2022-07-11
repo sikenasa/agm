@@ -1,17 +1,20 @@
-from typing import Callable, Type, Optional as Maybe, Union as U, Union as U
+from typing import Callable, Type, Optional, Union as U, Union as U
 from dataclasses import dataclass, field
+from enum import Flag, auto
+
 
 class Status:
     ...
 
-from . import engine, observer, unit, scene as scn, target as tgt
-
+from . import engine
 
 EventHandler = tuple[str, int, Callable[[engine.Engine], None]]
+Callback = Callable[[object, engine.Engine], None]
 
+from . import observer, unit, scene as scn, target as tgt
 
 def ev(type: str = "", priority: int = 0):
-    def decor(body: Callable[[engine.Engine], None]):
+    def decor(body: Callback) -> EventHandler:
         type_ = type if type else body.__name__
         return type_, priority, body
     return decor
@@ -31,23 +34,32 @@ class StatusMeta(type):
         return class_obj
 
 
+class StatusEnum(Flag):
+    UNBREAKABLE = auto()
+    UNDISPELLABLE = auto()
+    PERMANENT = auto()
+    KEY = auto()
+
+    # AGM-specific status types
+    INVISIBLE = auto()
+    IMPLICIT = auto()
+    REMOVED = auto()
+
+    DEF = 0
+
+
+@dataclass
 class Status(metaclass=StatusMeta):
-    def __init__(self):
-        self._disable: int = 0
+    parent: Status = None
+    owner: unit.Unit = None
+    turns: U[int, None] = None
+    uses: U[int, None] = None
 
-        self.parent: Status = None
-        self.owner: unit.Unit = None
-        self.turns: U[int, None] = None
-        self.uses: U[int, None] = None
-        self.unbreakable: bool = False
-        self.permanent: bool = False
-        self.key: bool = False
-        self.invisible: bool = False
-        self.implicit: bool = False
+    _disable: int = 0
+    flags: StatusEnum = StatusEnum.DEF
 
-    def set_relationship(self, target: unit.Unit, owner: unit.Unit):
-        self.owner = owner
-        owner.inflictors[self] = target
+    def __hash__(self) -> int:
+        return id(self)
 
     def enabled(self) -> bool:
         return self._disable == 0
@@ -58,29 +70,54 @@ class Status(metaclass=StatusMeta):
     def disable(self):
         self._disable += 1
 
-    def is_invisible(self) -> bool:
-        return self.invisible or self.implicit
+    def top_parent(self) -> Status:
+        parent = self
+        while parent.parent is not None:
+            parent = parent.parent
+        return parent
 
     def tick(self) -> bool:
-        return False
+        if isinstance(self.turns, int):
+            self.turns -= 1
+            return self.turns == 0
+        else:
+            return False
 
-    def use(self) -> Maybe[Status]:
+    def use(self) -> Optional[Status]:
+        if self.parent is not None:
+            sts = self.parent.use()
+            if sts is not None:
+                return sts
+
+        if isinstance(self.uses, int):
+            if self.uses > 0:
+                self.uses -= 1
+
+            if self.uses == 0:
+                return self.top_parent()
+
         return None
 
-    def on_init(self, owner: unit.Unit, scene: scn.Scene, cond: Callable[[engine.Engine], bool] = None):
-        for type_, priority, body in getattr(self.__class__, "events", []):
-            scene.events[type_].append(observer.Observer(self, owner, body, priority, cond))
+    def on_init(
+        self,
+        owner: unit.Unit,
+        scene: scn.Scene,
+        cond: Optional[Callback] = None
+    ):
+        for type, priority, body in getattr(self.__class__, "events", []):
+            scene.events[type].append(
+                observer.Observer(self, priority, owner, body, cond)
+            )
 
     def on_remove(self, scene: scn.Scene):
-        for type_, priority, body in getattr(self.__class__, "events", []):
-            scene.events[type_] = \
-                [*filter(lambda obs: obs.status is self, self.events[type_])]
+        for type, priority, body in getattr(self.__class__, "events", []):
+            scene.events[type].remove(observer.Observer(self))
 
-    def t(self, t) -> Status:
+    def t(self, t: U[int]) -> Status:
         self.turns = t
         return self
 
-    def u(self, u) -> Status:
+    def u(self, u: int) -> Status:
         self.uses = u
         return self
 
@@ -104,7 +141,7 @@ class Status(metaclass=StatusMeta):
         return ""
 
     def aura(self, target: tgt.Target) -> Status: pass
-    def vs(self, cond: Callable[[engine.Engine], bool]) -> Status: pass
+    def vs(self, cond: Callback) -> Status: pass
 
 
 class PotencyStatus(Status):
@@ -120,6 +157,7 @@ class MountedStatus(PotencyStatus):
     def __init__(self, mount: Status, potency: object):
         super().__init__(potency)
         self.mount = mount
+        mount.parent = self
 
     def __str__(self) -> str:
         return f"<{self.mount}> {super().__str__()}"
