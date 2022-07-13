@@ -14,7 +14,7 @@ class ActionType:
     name: str
     doc: str
     cd: int = 0
-    body: Callable[[engine.Engine], None] = None
+    body: Callable[[engine.Context, engine.Engine], None] = None
     passive: Callable[[], status.Status] = None
 
     def with_body(self, f):

@@ -38,6 +38,9 @@ class Unit:
     def __eq__(self, o: Unit) -> bool:
         return self is o
 
+    def __hash__(self) -> int:
+        return id(self)
+
     def can_act(self) -> bool:
         return UnitEnum.DEAD | UnitEnum.REMOVED not in self.flags \
             and isinstance(self.num_acts, int) and self.num_acts > 0

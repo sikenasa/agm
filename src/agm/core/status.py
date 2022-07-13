@@ -8,8 +8,8 @@ class Status:
 
 from . import engine
 
-EventHandler = tuple[str, int, Callable[[engine.Engine], None]]
-Callback = Callable[[object, engine.Engine], None]
+Callback = Callable[[engine.Context, engine.Engine], None]
+EventHandler = tuple[str, int, Callback]
 
 from . import observer, unit, scene as scn, target as tgt
 
@@ -76,12 +76,17 @@ class Status(metaclass=StatusMeta):
             parent = parent.parent
         return parent
 
+    def bearer(self) -> unit.Unit:
+        return self.owner.inflictors[self]
+
     def tick(self) -> bool:
-        if isinstance(self.turns, int):
-            self.turns -= 1
-            return self.turns == 0
-        else:
+        if self.turns is None:
             return False
+
+        elif isinstance(self.turns, int):
+            if self.turns > 0:
+                self.turns -= 1
+            return self.turns == 0
 
     def use(self) -> Optional[Status]:
         if self.parent is not None:

@@ -17,19 +17,19 @@ class Scene:
         self.teams["ally"] = team.Team("ally", "allies")
         self.teams["enemy"] = team.Team("enemy", "enemies")
 
-    def link(self, target: unit.Unit):
+    def link_unit(self, target: unit.Unit):
         for status in target.statuses:
             target._link_status(status, self, target)
         self.units.append(target)
         target.flags &= ~unit.UnitEnum.REMOVED
 
-    def unlink(self, target: unit.Unit):
+    def unlink_unit(self, target: unit.Unit):
         for status in target.statuses:
             owner = status.owner
             self._unlink_status_aux(
                 status,
                 owner,
-                owner.inflictors[status]
+                target,
             )
 
         if len(self.units) > 1:
@@ -54,19 +54,22 @@ class Scene:
     def unlink_status(self, status: sts.Status):
         owner = status.owner
         target = owner.inflictors[status]
-        target.statuses.remove(status)
         self._unlink_status_aux(status, owner, target)
+        target.statuses.remove(status)
 
     def _unlink_status_aux(self, status: sts.Status, owner, target):
         status.on_remove(self)
-        del status.owner.inflictors[status]
+        del owner.inflictors[status]
         status.owner = None
         status.flags |= sts.StatusEnum.REMOVED
 
-    def query(self, target: tgt.Target):
+    def query(self, target: tgt.Target = None):
+        if target is None:
+            target = tgt.All
+
         yield from filter(
             lambda u: unit.UnitEnum.REMOVED not in u.flags,
-            [u for u in self.units if target.belongs(u)]
+            target.query(self),
         )
 
     def T(self, team_name: str) -> tgt.Team:
@@ -92,11 +95,6 @@ class Scene:
                 for unit_ in self.query(obs.owner):
                     obs.callback(e, unit_)
 
-    def tick_global_turn(self):
-        self.turn += 1
-        for unit in self.units:
-            unit.num_acts = 1
-
     def get_next_unit_turn(self) -> unit.Unit:
         target: unit.Unit = None
 
@@ -107,13 +105,6 @@ class Scene:
                 target = u
 
         return target
-
-    def tick_unit_turn(self, target: unit.Unit):
-        for act in target.actions:
-            act.tick()
-        for sts in target.inflictors:
-            if sts.tick():
-                self.unlink_status(sts)
 
     def __str__(self) -> str:
         return self.show()

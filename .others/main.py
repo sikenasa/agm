@@ -1,22 +1,28 @@
 from agm import *
+import random
 
 eng, ctx, scn = Engine.make()
 
-print(sum(len(b) for _,b in scn.events.items()))
+names = [
+    "Sandra",
+    "Sarah",
+    "Oru",
+    "Renée",
+]
+hps = [
+    80,
+    95,
+    70,
+    80,
+]
 
-for i in range(1, 4):
-    scn.link(Unit(f"Sandra#{i}", "ally",
-        hp = 90, max_hp = 90,
-        statuses = [
-            AtkUp(5).aura(scn.T("ally")).u(4),
-        ],
+for name, hp in zip(names, hps):
+    scn.link_unit(Unit(name, "ally",
+        hp = hp, max_hp = hp,
+        ap = D[11:14],
+        gp = D[8:12],
+        cp = 5,
+        actions = [Attack(), Defend(), Concentrate()],
     ))
 
-print(sum(len(b) for _,b in scn.events.items()))
-
-while scn.units:
-    scn.unlink(scn.units[0])
-
-print(sum(len(b) for _,b in scn.events.items()))
-
-print(scn)
+eng.global_turn()

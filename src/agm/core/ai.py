@@ -1,19 +1,15 @@
+from typing import Callable, Optional
 from abc import ABC, abstractmethod
 
-from . import engine
+from . import engine, target
 
 class AI(ABC):
     @abstractmethod
-    def select_option(
-        self,
-        ctx: engine.Context,
+    def select_option(self,
+        eng: engine.Engine,
         title: str,
         options: list[str],
-    ):
-        ...
-
-    @abstractmethod
-    def select_target(
-        self,
-    ):
+        times: int = 1,
+        tag: Optional[str] = None,
+    ) -> list[int]:
         ...

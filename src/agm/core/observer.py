@@ -30,4 +30,4 @@ class Observer:
             s = self.status.use()
             if s is not None:
                 s.flags |= sts.StatusEnum.REMOVED
-                e.scene.unlink_status(s)
+                e.remove_status(s)
